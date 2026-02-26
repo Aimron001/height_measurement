@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mechatronics BT Dashboard</title>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --text: #f1f5f9; }
+        body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; margin: 0; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+        .card { background: var(--card); padding: 20px; border-radius: 16px; border: 1px solid #334155; }
+        .btn { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; margin-bottom: 20px; }
+        .stat-grid { display: grid; gap: 10px; margin-top: 20px; background: #0f172a; padding: 15px; border-radius: 10px; }
+        .stat-item { display: flex; justify-content: space-between; font-size: 0.9rem; }
+        .val { font-family: monospace; color: #10b981; font-weight: bold; }
+        .visual-container { background: white; border-radius: 16px; min-height: 400px; position: relative; }
+        svg { width: 100%; height: 100%; }
+        .status { font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <button id="connectBtn" class="btn">Connect via Bluetooth</button>
+        <div class="status">Live Telemetry</div>
+        <div class="stat-grid">
+            <div class="stat-item"><span>Wall (x):</span> <span class="val" id="valX">0.00m</span></div>
+            <div class="stat-item"><span>Ground (y):</span> <span class="val" id="valY">0.00m</span></div>
+            <div class="stat-item"><span>Motor (θ):</span> <span class="val" id="valTheta">0.00°</span></div>
+            <hr style="border: 0; border-top: 1px solid #334155; width: 100%;">
+            <div class="stat-item" style="color: #3b82f6; font-size: 1.1rem; font-weight: bold;">
+                <span>Ladder (L):</span> <span id="valL">0.00m</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="visual-container">
+        <svg id="viz" viewBox="0 0 600 450">
+            <line x1="50" y1="380" x2="550" y2="380" stroke="#1e293b" stroke-width="2" />
+            <line x1="500" y1="40" x2="500" y2="380" stroke="#1e293b" stroke-width="4" />
+            <line id="ladderLine" x1="400" y1="380" x2="500" y2="50" stroke="#64748b" stroke-width="12" stroke-linecap="round" />
+            <rect id="motorBox" x="0" y="0" width="30" height="20" fill="#3b82f6" rx="2" />
+            <circle id="targetDot" r="5" fill="#ef4444" stroke="white" stroke-width="1" />
+        </svg>
+    </div>
+</div>
+
+<script>
+    let bluetoothDevice, characteristic;
+
+    const connectBtn = document.getElementById('connectBtn');
+    const viz = {
+        ladder: document.getElementById('ladderLine'),
+        motor: document.getElementById('motorBox'),
+        dot: document.getElementById('targetDot'),
+        x: document.getElementById('valX'),
+        y: document.getElementById('valY'),
+        theta: document.getElementById('valTheta'),
+        l: document.getElementById('valL')
+    };
+
+    connectBtn.addEventListener('click', async () => {
+        try {
+            bluetoothDevice = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ['00001101-0000-1000-8000-00805f9b34fb'] // Standard Serial UUID
+            });
+            const server = await bluetoothDevice.gatt.connect();
+            const service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
+            characteristic = await service.getCharacteristic('00001101-0000-1000-8000-00805f9b34fb');
+            
+            characteristic.startNotifications();
+            characteristic.addEventListener('characteristicvaluechanged', handleData);
+            connectBtn.innerText = "Connected";
+            connectBtn.style.background = "#059669";
+        } catch (err) {
+            console.error(err);
+            alert("Bluetooth connection failed. Check Console.");
+        }
+    });
+
+    function handleData(event) {
+        const decoder = new TextDecoder();
+        const str = decoder.decode(event.target.value);
+        const parts = str.split(',');
+        if (parts.length < 3) return;
+
+        const theta = parseFloat(parts[0]);
+        const x = parseFloat(parts[1]) / 100; // cm to m
+        const y = parseFloat(parts[2]) / 100; // cm to m
+
+        updateUI(x, y, theta);
+    }
+
+    function updateUI(x, y, theta) {
+        // Calculations
+        const h_offset = x * Math.tan(theta * Math.PI / 180);
+        const h_total = y + h_offset;
+        const ladder_base = h_total / 4;
+        const ladder_len = Math.sqrt(Math.pow(ladder_base, 2) + Math.pow(h_total, 2));
+
+        // Update Text
+        viz.x.innerText = x.toFixed(2) + 'm';
+        viz.y.innerText = y.toFixed(2) + 'm';
+        viz.theta.innerText = theta.toFixed(1) + '°';
+        viz.l.innerText = ladder_len.toFixed(2) + 'm';
+
+        // Update SVG (Scale: 1m = 60px)
+        const scale = 60;
+        const wallX = 500;
+        const groundY = 380;
+
+        // Ladder positioning
+        viz.ladder.setAttribute('x1', wallX - (ladder_base * scale));
+        viz.ladder.setAttribute('y1', groundY);
+        viz.ladder.setAttribute('x2', wallX);
+        viz.ladder.setAttribute('y2', groundY - (h_total * scale));
+
+        // Motor positioning
+        viz.motor.setAttribute('x', wallX - (x * scale) - 15);
+        viz.motor.setAttribute('y', groundY - (y * scale) - 10);
+
+        // Target dot
+        viz.dot.setAttribute('cx', wallX);
+        viz.dot.setAttribute('cy', groundY - (h_total * scale));
+    }
+</script>
+</body>
+</html>

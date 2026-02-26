@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mechatronics System Dashboard - Enhanced Visibility</title>
+    <title>Mechatronics System Dashboard - Centered</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
@@ -23,8 +23,19 @@
          x-data="{ 
             x: 0.42, y: 0.83, theta: 15,
             connected: false,
-            vWidth: 800, vHeight: 600,
+            vWidth: 800, 
+            vHeight: 600,
             
+            init() {
+                const updateSize = () => {
+                    const container = this.$refs.canvasContainer;
+                    this.vWidth = container.clientWidth;
+                    this.vHeight = window.innerWidth < 768 ? 500 : 600;
+                };
+                window.addEventListener('resize', updateSize);
+                updateSize();
+            },
+
             async connectBT() {
                 try {
                     const port = await navigator.serial.requestPort();
@@ -57,15 +68,21 @@
             get ladder_angle() { return (Math.atan(this.h_total / this.ladder_base) * 180 / Math.PI).toFixed(1) },
 
             get scale() {
-                const targetFill = 0.75; 
+                // Large padding ensures labels (H, A, x) have room on all sides
+                const padding = 180; 
                 const totalWidth = Math.max(this.x, this.ladder_base) || 1;
                 const totalHeight = Math.max(this.h_total, this.y) || 1;
-                const scaleX = (this.vWidth * targetFill) / totalWidth;
-                const scaleY = (this.vHeight * targetFill) / totalHeight;
+                const scaleX = (this.vWidth - padding) / totalWidth;
+                const scaleY = (this.vHeight - padding) / totalHeight;
                 return Math.min(scaleX, scaleY);
             },
-            get originX() { return this.vWidth - 80 },
-            get originY() { return this.vHeight - 80 }
+
+            // Calculates the origin to keep the drawing centered vertically
+            get originX() { return this.vWidth - (this.vWidth * 0.15) },
+            get originY() { 
+                const drawingHeight = Math.max(this.h_total, this.y) * this.scale;
+                return (this.vHeight / 2) + (drawingHeight / 2) - 20;
+            }
          }">
         
         <div class="lg:col-span-1 space-y-6">
@@ -98,15 +115,15 @@
             <div class="bg-blue-600 p-6 rounded-3xl shadow-lg shadow-blue-900/20">
                 <label class="text-[10px] text-blue-100 font-bold uppercase tracking-widest opacity-70">Req. Ladder Length</label>
                 <div class="text-4xl font-black text-white" x-text="ladder_len.toFixed(2) + 'm'"></div>
-                <div class="mt-4 pt-4 border-t border-white/10 flex justify-between text-blue-100 font-bold">
+                <div class="mt-4 pt-4 border-t border-white/10 flex justify-between text-blue-100 font-bold text-sm">
                     <span>Base A: <span x-text="ladder_base.toFixed(2) + 'm'"></span></span>
                     <span>H: <span x-text="h_total.toFixed(2) + 'm'"></span></span>
                 </div>
             </div>
         </div>
 
-        <div class="lg:col-span-3 bg-white rounded-[2rem] shadow-inner overflow-hidden relative border-8 border-slate-900">
-            <svg :viewBox="`0 0 ${vWidth} ${vHeight}`" class="w-full h-full transition-all duration-500">
+        <div x-ref="canvasContainer" class="lg:col-span-3 bg-white rounded-[2rem] shadow-inner overflow-hidden relative border-8 border-slate-900 min-h-[500px]">
+            <svg :viewBox="`0 0 ${vWidth} ${vHeight}`" class="w-full h-full transition-all duration-500" preserveAspectRatio="xMidYMid meet">
                 <defs>
                     <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                         <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e293b" />
@@ -119,8 +136,8 @@
                     </marker>
                 </defs>
 
-                <line x1="20" :y1="originY" :x2="originX + 40" :y2="originY" stroke="#0f172a" stroke-width="3" />
-                <line :x1="originX" y1="20" :x2="originX" :y2="originY" stroke="#0f172a" stroke-width="5" />
+                <line x1="20" :y1="originY" :x2="vWidth" :y2="originY" stroke="#0f172a" stroke-width="3" />
+                <line :x1="originX" :y1="originY - (Math.max(h_total, y) * scale) - 20" :x2="originX" :y2="originY" stroke="#0f172a" stroke-width="5" />
 
                 <line :x1="originX - (ladder_base * scale)" :y1="originY" 
                       :x2="originX" :y2="originY - (h_total * scale)" 
@@ -143,14 +160,11 @@
 
                 <rect :x="originX - (x * scale) - 20" :y="originY - (y * scale) - 15" width="40" height="30" rx="6" fill="#2563eb" />
 
-                <circle :cx="originX" :cy="originY - (y * scale)" r="4" fill="#ef4444" />
-                <circle :cx="originX" :cy="originY - (h_total * scale)" r="6" fill="#ef4444" stroke="white" stroke-width="2" />
-
                 <line :x1="originX - (x * scale)" :y1="originY + 40" :x2="originX" :y2="originY + 40" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
                 <text :x="originX - (x * scale / 2)" :y="originY + 65" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="16" x-text="'x = ' + x.toFixed(2) + 'm'"></text>
 
-                <line :x1="originX - (x * scale) + 30" :y1="originY - (y * scale)" :x2="originX - (x * scale) + 30" :y2="originY" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
-                <text :x="originX - (x * scale) + 20" :y="originY - (y * scale / 2)" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="16" :transform="`rotate(-90, ${originX - (x * scale) + 20}, ${originY - (y * scale / 2)})`" x-text="'y = ' + y.toFixed(2) + 'm'"></text>
+                <line :x1="originX - (x * scale) - 35" :y1="originY - (y * scale)" :x2="originX - (x * scale) - 35" :y2="originY" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
+                <text :x="originX - (x * scale) - 45" :y="originY - (y * scale / 2)" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="16" :transform="`rotate(-90, ${originX - (x * scale) - 45}, ${originY - (y * scale / 2)})`" x-text="'y = ' + y.toFixed(2) + 'm'"></text>
 
                 <line :x1="originX + 30" :y1="originY - (h_total * scale)" :x2="originX + 30" :y2="originY" stroke="#10b981" stroke-width="2.5" marker-start="url(#arr-emerald)" marker-end="url(#arr-emerald)" />
                 <text :x="originX + 55" :y="originY - (h_total * scale / 2)" text-anchor="middle" class="dimension-text" fill="#10b981" font-size="18" :transform="`rotate(90, ${originX + 55}, ${originY - (h_total * scale / 2)})`" x-text="'H = ' + h_total.toFixed(2) + 'm'"></text>

@@ -2,128 +2,99 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mechatronics BT Dashboard</title>
-    <style>
-        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --text: #f1f5f9; }
-        body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; margin: 0; padding: 20px; }
-        .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
-        .card { background: var(--card); padding: 20px; border-radius: 16px; border: 1px solid #334155; }
-        .btn { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; margin-bottom: 20px; }
-        .stat-grid { display: grid; gap: 10px; margin-top: 20px; background: #0f172a; padding: 15px; border-radius: 10px; }
-        .stat-item { display: flex; justify-content: space-between; font-size: 0.9rem; }
-        .val { font-family: monospace; color: #10b981; font-weight: bold; }
-        .visual-container { background: white; border-radius: 16px; min-height: 400px; position: relative; }
-        svg { width: 100%; height: 100%; }
-        .status { font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 5px; }
-    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8 font-sans">
 
-<div class="container">
-    <div class="card">
-        <button id="connectBtn" class="btn">Connect via Bluetooth</button>
-        <div class="status">Live Telemetry</div>
-        <div class="stat-grid">
-            <div class="stat-item"><span>Wall (x):</span> <span class="val" id="valX">0.00m</span></div>
-            <div class="stat-item"><span>Ground (y):</span> <span class="val" id="valY">0.00m</span></div>
-            <div class="stat-item"><span>Motor (θ):</span> <span class="val" id="valTheta">0.00°</span></div>
-            <hr style="border: 0; border-top: 1px solid #334155; width: 100%;">
-            <div class="stat-item" style="color: #3b82f6; font-size: 1.1rem; font-weight: bold;">
-                <span>Ladder (L):</span> <span id="valL">0.00m</span>
+    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6" 
+         x-data="{ 
+            x: 6.2, y: 1.4, theta: 14,
+            connected: false,
+            device: null,
+            async connectBT() {
+                try {
+                    const device = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: ['00001101-0000-1000-8000-00805f9b34fb'] // Standard Serial Port UUID
+                    });
+                    const server = await device.gatt.connect();
+                    this.connected = true;
+                    this.device = device;
+                    
+                    // Note: For ESP32 Classic BT, browsers usually require WebSerial or a specific BLE characteristic.
+                    // This example assumes BLE. If using Classic BT, please use the Web Serial API instead.
+                    alert('Bluetooth Connected! Listening for data...');
+                } catch (err) {
+                    console.error(err);
+                    alert('Connection failed: ' + err.message);
+                }
+            },
+            // Logic to handle incoming string 'angle,x,y'
+            parseData(raw) {
+                const parts = raw.split(',');
+                if(parts.length === 3) {
+                    this.theta = parseFloat(parts[0]);
+                    this.x = parseFloat(parts[1]);
+                    this.y = parseFloat(parts[2]);
+                }
+            },
+            get h_offset() { return this.x * Math.tan(this.theta * Math.PI / 180) },
+            get h_total() { return parseFloat(this.y) + this.h_offset },
+            get ladder_base() { return this.h_total / 4 },
+            get ladder_len() { return Math.sqrt(Math.pow(this.ladder_base, 2) + Math.pow(this.h_total, 2)) },
+            get ladder_angle_rad() { return Math.atan(this.h_total / this.ladder_base) },
+            get ladder_angle_deg() { return (this.ladder_angle_rad * 180 / Math.PI).toFixed(1) }
+         }">
+        
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                    Live System
+                </h1>
+                <button @click="connectBT()" 
+                        :class="connected ? 'bg-emerald-600' : 'bg-blue-600'"
+                        class="px-4 py-1 rounded-full text-xs font-bold uppercase tracking-tighter transition-all">
+                    <span x-text="connected ? 'Connected' : 'Connect BT'"></span>
+                </button>
+            </div>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="text-xs text-slate-400 uppercase tracking-widest font-bold">Dist. to Wall (x)</label>
+                    <input type="number" step="0.1" x-model="x" class="w-full bg-slate-900 mt-1 p-3 rounded-lg border border-slate-700 font-mono">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 uppercase tracking-widest font-bold">Device Height (y)</label>
+                    <input type="number" step="0.1" x-model="y" class="w-full bg-slate-900 mt-1 p-3 rounded-lg border border-slate-700 font-mono">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 uppercase tracking-widest font-bold">Motor Angle (θ): <span class="text-blue-400" x-text="theta + '°'"></span></label>
+                    <input type="range" min="0" max="65" step="0.1" x-model="theta" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 mt-2">
+                </div>
+            </div>
+
+            <div class="mt-8 space-y-3 bg-slate-900/80 p-5 rounded-xl border border-blue-500/20">
+                <div class="flex justify-between text-sm"><span>Wall Height (H):</span> <span class="text-emerald-400 font-mono" x-text="h_total.toFixed(2) + 'm'"></span></div>
+                <div class="flex justify-between text-sm"><span>Ladder Base (A):</span> <span class="text-amber-400 font-mono" x-text="ladder_base.toFixed(2) + 'm'"></span></div>
+                <div class="flex justify-between font-bold text-lg text-blue-400 pt-2 border-t border-slate-700"><span>Req. Ladder (L):</span> <span x-text="ladder_len.toFixed(2) + 'm'"></span></div>
             </div>
         </div>
+
+        <div class="lg:col-span-2 bg-white rounded-2xl shadow-inner relative overflow-hidden flex items-center justify-center">
+            <svg viewBox="0 0 600 450" class="w-full h-full font-mono">
+                <line x1="50" y1="380" x2="550" y2="380" stroke="#1e293b" stroke-width="2" />
+                <line x1="500" y1="40" x2="500" y2="380" stroke="#1e293b" stroke-width="4" />
+                <g>
+                    <line :x1="500 - (ladder_base * 60)" y1="380" :x2="500" :y2="380 - (h_total * 60)" stroke="#cbd5e1" stroke-width="16" stroke-linecap="round" />
+                    <text :x="500 - (ladder_base * 60) + 35" y="370" fill="#f59e0b" font-size="11" font-weight="bold" x-text="ladder_angle_deg + '°'"></text>
+                </g>
+                <circle :cx="500" :cy="380 - (h_total * 60)" r="5" fill="#ef4444" stroke="white" stroke-width="1" />
+            </svg>
+        </div>
     </div>
-
-    <div class="visual-container">
-        <svg id="viz" viewBox="0 0 600 450">
-            <line x1="50" y1="380" x2="550" y2="380" stroke="#1e293b" stroke-width="2" />
-            <line x1="500" y1="40" x2="500" y2="380" stroke="#1e293b" stroke-width="4" />
-            <line id="ladderLine" x1="400" y1="380" x2="500" y2="50" stroke="#64748b" stroke-width="12" stroke-linecap="round" />
-            <rect id="motorBox" x="0" y="0" width="30" height="20" fill="#3b82f6" rx="2" />
-            <circle id="targetDot" r="5" fill="#ef4444" stroke="white" stroke-width="1" />
-        </svg>
-    </div>
-</div>
-
-<script>
-    let bluetoothDevice, characteristic;
-
-    const connectBtn = document.getElementById('connectBtn');
-    const viz = {
-        ladder: document.getElementById('ladderLine'),
-        motor: document.getElementById('motorBox'),
-        dot: document.getElementById('targetDot'),
-        x: document.getElementById('valX'),
-        y: document.getElementById('valY'),
-        theta: document.getElementById('valTheta'),
-        l: document.getElementById('valL')
-    };
-
-    connectBtn.addEventListener('click', async () => {
-        try {
-            bluetoothDevice = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: ['00001101-0000-1000-8000-00805f9b34fb'] // Standard Serial UUID
-            });
-            const server = await bluetoothDevice.gatt.connect();
-            const service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
-            characteristic = await service.getCharacteristic('00001101-0000-1000-8000-00805f9b34fb');
-            
-            characteristic.startNotifications();
-            characteristic.addEventListener('characteristicvaluechanged', handleData);
-            connectBtn.innerText = "Connected";
-            connectBtn.style.background = "#059669";
-        } catch (err) {
-            console.error(err);
-            alert("Bluetooth connection failed. Check Console.");
-        }
-    });
-
-    function handleData(event) {
-        const decoder = new TextDecoder();
-        const str = decoder.decode(event.target.value);
-        const parts = str.split(',');
-        if (parts.length < 3) return;
-
-        const theta = parseFloat(parts[0]);
-        const x = parseFloat(parts[1]) / 100; // cm to m
-        const y = parseFloat(parts[2]) / 100; // cm to m
-
-        updateUI(x, y, theta);
-    }
-
-    function updateUI(x, y, theta) {
-        // Calculations
-        const h_offset = x * Math.tan(theta * Math.PI / 180);
-        const h_total = y + h_offset;
-        const ladder_base = h_total / 4;
-        const ladder_len = Math.sqrt(Math.pow(ladder_base, 2) + Math.pow(h_total, 2));
-
-        // Update Text
-        viz.x.innerText = x.toFixed(2) + 'm';
-        viz.y.innerText = y.toFixed(2) + 'm';
-        viz.theta.innerText = theta.toFixed(1) + '°';
-        viz.l.innerText = ladder_len.toFixed(2) + 'm';
-
-        // Update SVG (Scale: 1m = 60px)
-        const scale = 60;
-        const wallX = 500;
-        const groundY = 380;
-
-        // Ladder positioning
-        viz.ladder.setAttribute('x1', wallX - (ladder_base * scale));
-        viz.ladder.setAttribute('y1', groundY);
-        viz.ladder.setAttribute('x2', wallX);
-        viz.ladder.setAttribute('y2', groundY - (h_total * scale));
-
-        // Motor positioning
-        viz.motor.setAttribute('x', wallX - (x * scale) - 15);
-        viz.motor.setAttribute('y', groundY - (y * scale) - 10);
-
-        // Target dot
-        viz.dot.setAttribute('cx', wallX);
-        viz.dot.setAttribute('cy', groundY - (h_total * scale));
-    }
-</script>
 </body>
 </html>

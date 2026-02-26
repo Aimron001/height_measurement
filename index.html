@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mechatronics System Dashboard - Centered</title>
+    <title>Mechatronics Dashboard - Ultra Responsive</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
@@ -13,7 +13,7 @@
             font-weight: 800; 
             paint-order: stroke;
             stroke: white;
-            stroke-width: 0.5px;
+            stroke-width: 0.6px;
         }
     </style>
 </head>
@@ -30,7 +30,8 @@
                 const updateSize = () => {
                     const container = this.$refs.canvasContainer;
                     this.vWidth = container.clientWidth;
-                    this.vHeight = window.innerWidth < 768 ? 500 : 600;
+                    // Force more height on small screens to fit vertical dimensions
+                    this.vHeight = window.innerWidth < 600 ? 550 : 600;
                 };
                 window.addEventListener('resize', updateSize);
                 updateSize();
@@ -68,8 +69,8 @@
             get ladder_angle() { return (Math.atan(this.h_total / this.ladder_base) * 180 / Math.PI).toFixed(1) },
 
             get scale() {
-                // Large padding ensures labels (H, A, x) have room on all sides
-                const padding = 180; 
+                // High padding (260) ensures the drawing is small enough to keep labels visible
+                const padding = 260; 
                 const totalWidth = Math.max(this.x, this.ladder_base) || 1;
                 const totalHeight = Math.max(this.h_total, this.y) || 1;
                 const scaleX = (this.vWidth - padding) / totalWidth;
@@ -77,11 +78,11 @@
                 return Math.min(scaleX, scaleY);
             },
 
-            // Calculates the origin to keep the drawing centered vertically
-            get originX() { return this.vWidth - (this.vWidth * 0.15) },
+            // Adjust originX based on width to prevent right-side clipping
+            get originX() { return this.vWidth < 522 ? this.vWidth - 60 : this.vWidth - 100 },
             get originY() { 
                 const drawingHeight = Math.max(this.h_total, this.y) * this.scale;
-                return (this.vHeight / 2) + (drawingHeight / 2) - 20;
+                return (this.vHeight / 2) + (drawingHeight / 2) - 10;
             }
          }">
         
@@ -115,65 +116,59 @@
             <div class="bg-blue-600 p-6 rounded-3xl shadow-lg shadow-blue-900/20">
                 <label class="text-[10px] text-blue-100 font-bold uppercase tracking-widest opacity-70">Req. Ladder Length</label>
                 <div class="text-4xl font-black text-white" x-text="ladder_len.toFixed(2) + 'm'"></div>
-                <div class="mt-4 pt-4 border-t border-white/10 flex justify-between text-blue-100 font-bold text-sm">
+                <div class="mt-4 pt-4 border-t border-white/10 flex justify-between text-blue-100 font-bold text-xs">
                     <span>Base A: <span x-text="ladder_base.toFixed(2) + 'm'"></span></span>
                     <span>H: <span x-text="h_total.toFixed(2) + 'm'"></span></span>
                 </div>
             </div>
         </div>
 
-        <div x-ref="canvasContainer" class="lg:col-span-3 bg-white rounded-[2rem] shadow-inner overflow-hidden relative border-8 border-slate-900 min-h-[500px]">
+        <div x-ref="canvasContainer" class="lg:col-span-3 bg-white rounded-[2rem] shadow-inner overflow-hidden relative border-8 border-slate-900 min-h-[550px]">
             <svg :viewBox="`0 0 ${vWidth} ${vHeight}`" class="w-full h-full transition-all duration-500" preserveAspectRatio="xMidYMid meet">
                 <defs>
                     <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                         <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e293b" />
                     </marker>
-                    <marker id="arr-amber" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" />
-                    </marker>
                     <marker id="arr-emerald" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                         <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
                     </marker>
+                    <marker id="arr-amber" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" />
+                    </marker>
                 </defs>
 
-                <line x1="20" :y1="originY" :x2="vWidth" :y2="originY" stroke="#0f172a" stroke-width="3" />
-                <line :x1="originX" :y1="originY - (Math.max(h_total, y) * scale) - 20" :x2="originX" :y2="originY" stroke="#0f172a" stroke-width="5" />
+                <line x1="10" :y1="originY" :x2="vWidth-10" :y2="originY" stroke="#0f172a" stroke-width="3" />
+                <line :x1="originX" :y1="originY - (Math.max(h_total, y) * scale) - 60" :x2="originX" :y2="originY" stroke="#0f172a" stroke-width="5" />
 
                 <line :x1="originX - (ladder_base * scale)" :y1="originY" 
                       :x2="originX" :y2="originY - (h_total * scale)" 
                       stroke="#e2e8f0" stroke-width="22" stroke-linecap="round" />
                 
-                <text :x="originX - (ladder_base * scale / 2)" 
-                      :y="originY - (h_total * scale / 2)"
-                      class="dimension-text" fill="#334155" font-size="18" text-anchor="middle"
-                      :transform="`rotate(${-Math.atan(h_total/ladder_base)*180/Math.PI}, ${originX - (ladder_base * scale / 2)}, ${originY - (h_total * scale / 2)}) translate(0, -15)`"
-                      x-text="'L = ' + ladder_len.toFixed(2) + 'm'"></text>
-
                 <line :x1="originX - (x * scale)" :y1="originY - (y * scale)" :x2="originX" :y2="originY - (y * scale)" 
                       stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" />
                 <line :x1="originX - (x * scale)" :y1="originY - (y * scale)" :x2="originX" :y2="originY - (h_total * scale)" 
                       stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" />
 
-                <path :d="`M ${originX - (x * scale) + 30} ${originY - (y * scale)} A 30 30 0 0 0 ${originX - (x * scale) + 30 * Math.cos(theta * Math.PI / 180)} ${originY - (y * scale) - 30 * Math.sin(theta * Math.PI / 180)}`" 
-                      fill="none" stroke="#ef4444" stroke-width="2" />
-                <text :x="originX - (x * scale) + 35" :y="originY - (y * scale) - 10" class="dimension-text" fill="#ef4444" font-size="14" x-text="theta.toFixed(1) + '°'"></text>
+                <circle :cx="originX" :cy="originY - (y * scale)" r="5" fill="#ef4444" stroke="white" stroke-width="1.5" />
+                <circle :cx="originX" :cy="originY - (h_total * scale)" r="6" fill="#ef4444" stroke="white" stroke-width="2" />
 
                 <rect :x="originX - (x * scale) - 20" :y="originY - (y * scale) - 15" width="40" height="30" rx="6" fill="#2563eb" />
 
-                <line :x1="originX - (x * scale)" :y1="originY + 40" :x2="originX" :y2="originY + 40" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
-                <text :x="originX - (x * scale / 2)" :y="originY + 65" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="16" x-text="'x = ' + x.toFixed(2) + 'm'"></text>
+                <line :x1="originX + 25" :y1="originY - (h_total * scale)" :x2="originX + 25" :y2="originY" stroke="#10b981" stroke-width="2" marker-start="url(#arr-emerald)" marker-end="url(#arr-emerald)" />
+                <text :x="vWidth < 522 ? originX + 10 : originX + 45" 
+                      :y="originY - (h_total * scale / 2)" 
+                      text-anchor="middle" class="dimension-text" fill="#10b981" font-size="14" 
+                      :transform="`rotate(90, ${vWidth < 522 ? originX + 10 : originX + 45}, ${originY - (h_total * scale / 2)})`" 
+                      x-text="'H = ' + h_total.toFixed(2) + 'm'"></text>
 
-                <line :x1="originX - (x * scale) - 35" :y1="originY - (y * scale)" :x2="originX - (x * scale) - 35" :y2="originY" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
-                <text :x="originX - (x * scale) - 45" :y="originY - (y * scale / 2)" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="16" :transform="`rotate(-90, ${originX - (x * scale) - 45}, ${originY - (y * scale / 2)})`" x-text="'y = ' + y.toFixed(2) + 'm'"></text>
+                <line :x1="originX - (x * scale)" :y1="originY + 35" :x2="originX" :y2="originY + 35" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
+                <text :x="originX - (x * scale / 2)" :y="originY + 55" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="14" x-text="'x=' + x.toFixed(2) + 'm'"></text>
 
-                <line :x1="originX + 30" :y1="originY - (h_total * scale)" :x2="originX + 30" :y2="originY" stroke="#10b981" stroke-width="2.5" marker-start="url(#arr-emerald)" marker-end="url(#arr-emerald)" />
-                <text :x="originX + 55" :y="originY - (h_total * scale / 2)" text-anchor="middle" class="dimension-text" fill="#10b981" font-size="18" :transform="`rotate(90, ${originX + 55}, ${originY - (h_total * scale / 2)})`" x-text="'H = ' + h_total.toFixed(2) + 'm'"></text>
+                <line :x1="originX - (x * scale) - 30" :y1="originY - (y * scale)" :x2="originX - (x * scale) - 30" :y2="originY" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
+                <text :x="originX - (x * scale) - 42" :y="originY - (y * scale / 2)" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="14" :transform="`rotate(-90, ${originX - (x * scale) - 42}, ${originY - (y * scale / 2)})`" x-text="'y=' + y.toFixed(2)"></text>
 
-                <line :x1="originX - (ladder_base * scale)" :y1="originY + 15" :x2="originX" :y2="originY + 15" stroke="#f59e0b" stroke-width="2" marker-start="url(#arr-amber)" marker-end="url(#arr-amber)" />
-                <text :x="originX - (ladder_base * scale / 2)" :y="originY + 32" text-anchor="middle" class="dimension-text" fill="#f59e0b" font-size="16" x-text="'A = ' + ladder_base.toFixed(2) + 'm'"></text>
-                
-                <path :d="`M ${originX - (ladder_base * scale) + 35} ${originY} A 35 35 0 0 0 ${originX - (ladder_base * scale) + 32} ${originY - 12}`" fill="none" stroke="#f59e0b" stroke-width="2.5" />
-                <text :x="originX - (ladder_base * scale) + 40" :y="originY - 10" class="dimension-text" fill="#f59e0b" font-size="16" x-text="ladder_angle + '°'"></text>
+                <line :x1="originX - (ladder_base * scale)" :y1="originY + 12" :x2="originX" :y2="originY + 12" stroke="#f59e0b" stroke-width="2" marker-start="url(#arr-amber)" marker-end="url(#arr-amber)" />
+                <text :x="originX - (ladder_base * scale / 2)" :y="originY + 28" text-anchor="middle" class="dimension-text" fill="#f59e0b" font-size="14" x-text="'A=' + ladder_base.toFixed(2)"></text>
             </svg>
         </div>
     </div>

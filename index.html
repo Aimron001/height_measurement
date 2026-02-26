@@ -3,96 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mechatronics BT Dashboard</title>
+    <title>Mechatronics System Dashboard - Enhanced Visibility</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .dimension-text { 
+            font-family: 'JetBrains Mono', 'Fira Code', monospace; 
+            font-weight: 800; 
+            paint-order: stroke;
+            stroke: white;
+            stroke-width: 0.5px;
+        }
+    </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8 font-sans">
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 md:p-8 overflow-x-hidden">
 
-    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6" 
+    <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6" 
          x-data="{ 
-            x: 6.2, y: 1.4, theta: 14,
+            x: 0.42, y: 0.83, theta: 15,
             connected: false,
-            device: null,
+            vWidth: 800, vHeight: 600,
+            
             async connectBT() {
                 try {
-                    const device = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: ['00001101-0000-1000-8000-00805f9b34fb'] // Standard Serial Port UUID
-                    });
-                    const server = await device.gatt.connect();
+                    const port = await navigator.serial.requestPort();
+                    await port.open({ baudRate: 115200 });
                     this.connected = true;
-                    this.device = device;
-                    
-                    // Note: For ESP32 Classic BT, browsers usually require WebSerial or a specific BLE characteristic.
-                    // This example assumes BLE. If using Classic BT, please use the Web Serial API instead.
-                    alert('Bluetooth Connected! Listening for data...');
-                } catch (err) {
-                    console.error(err);
-                    alert('Connection failed: ' + err.message);
-                }
+                    const decoder = new TextDecoderStream();
+                    port.readable.pipeTo(decoder.writable);
+                    const reader = decoder.readable.getReader();
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        const lines = value.split('\n');
+                        const lastLine = lines[lines.length - 2]; 
+                        if (lastLine) {
+                            const parts = lastLine.trim().split(',');
+                            if(parts.length === 3) {
+                                this.theta = parseFloat(parts[0]);
+                                this.x = parseFloat(parts[1]);
+                                this.y = parseFloat(parts[2]);
+                            }
+                        }
+                    }
+                } catch (err) { console.error(err); }
             },
-            // Logic to handle incoming string 'angle,x,y'
-            parseData(raw) {
-                const parts = raw.split(',');
-                if(parts.length === 3) {
-                    this.theta = parseFloat(parts[0]);
-                    this.x = parseFloat(parts[1]);
-                    this.y = parseFloat(parts[2]);
-                }
-            },
+
             get h_offset() { return this.x * Math.tan(this.theta * Math.PI / 180) },
-            get h_total() { return parseFloat(this.y) + this.h_offset },
+            get h_total() { return parseFloat(this.y) + this.h_offset + 0.06},
             get ladder_base() { return this.h_total / 4 },
             get ladder_len() { return Math.sqrt(Math.pow(this.ladder_base, 2) + Math.pow(this.h_total, 2)) },
-            get ladder_angle_rad() { return Math.atan(this.h_total / this.ladder_base) },
-            get ladder_angle_deg() { return (this.ladder_angle_rad * 180 / Math.PI).toFixed(1) }
+            get ladder_angle() { return (Math.atan(this.h_total / this.ladder_base) * 180 / Math.PI).toFixed(1) },
+
+            get scale() {
+                const targetFill = 0.75; 
+                const totalWidth = Math.max(this.x, this.ladder_base) || 1;
+                const totalHeight = Math.max(this.h_total, this.y) || 1;
+                const scaleX = (this.vWidth * targetFill) / totalWidth;
+                const scaleY = (this.vHeight * targetFill) / totalHeight;
+                return Math.min(scaleX, scaleY);
+            },
+            get originX() { return this.vWidth - 80 },
+            get originY() { return this.vHeight - 80 }
          }">
         
-        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-2xl">
-            <div class="flex justify-between items-center mb-6">
-                <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">
-                    <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                    Live System
-                </h1>
-                <button @click="connectBT()" 
-                        :class="connected ? 'bg-emerald-600' : 'bg-blue-600'"
-                        class="px-4 py-1 rounded-full text-xs font-bold uppercase tracking-tighter transition-all">
-                    <span x-text="connected ? 'Connected' : 'Connect BT'"></span>
-                </button>
-            </div>
-            
-            <div class="space-y-6">
-                <div>
-                    <label class="text-xs text-slate-400 uppercase tracking-widest font-bold">Dist. to Wall (x)</label>
-                    <input type="number" step="0.1" x-model="x" class="w-full bg-slate-900 mt-1 p-3 rounded-lg border border-slate-700 font-mono">
+        <div class="lg:col-span-1 space-y-6">
+            <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
+                <div class="flex items-center justify-between mb-8">
+                    <h2 class="text-blue-400 font-black tracking-tighter text-xl">SYSTEM CTRL</h2>
+                    <button @click="connectBT()" 
+                            :class="connected ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : 'bg-blue-600 text-white border-transparent'"
+                            class="px-4 py-2 rounded-xl text-xs font-bold border transition-all">
+                        <span x-text="connected ? 'LIVE' : 'CONNECT'"></span>
+                    </button>
                 </div>
-                <div>
-                    <label class="text-xs text-slate-400 uppercase tracking-widest font-bold">Device Height (y)</label>
-                    <input type="number" step="0.1" x-model="y" class="w-full bg-slate-900 mt-1 p-3 rounded-lg border border-slate-700 font-mono">
-                </div>
-                <div>
-                    <label class="text-xs text-slate-400 uppercase tracking-widest font-bold">Motor Angle (θ): <span class="text-blue-400" x-text="theta + '°'"></span></label>
-                    <input type="range" min="0" max="65" step="0.1" x-model="theta" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 mt-2">
+
+                <div class="space-y-4">
+                    <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
+                        <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Sensor X (Wall)</label>
+                        <div class="text-2xl font-mono text-white" x-text="x.toFixed(3) + 'm'"></div>
+                    </div>
+                    <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
+                        <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Sensor Y (Floor)</label>
+                        <div class="text-2xl font-mono text-white" x-text="y.toFixed(3) + 'm'"></div>
+                    </div>
+                    <div class="bg-black/40 p-4 rounded-2xl border border-blue-500/20">
+                        <label class="text-[10px] text-blue-500 font-bold uppercase tracking-widest">Laser Angle (θ)</label>
+                        <div class="text-2xl font-mono text-blue-400" x-text="theta.toFixed(1) + '°'"></div>
+                    </div>
                 </div>
             </div>
 
-            <div class="mt-8 space-y-3 bg-slate-900/80 p-5 rounded-xl border border-blue-500/20">
-                <div class="flex justify-between text-sm"><span>Wall Height (H):</span> <span class="text-emerald-400 font-mono" x-text="h_total.toFixed(2) + 'm'"></span></div>
-                <div class="flex justify-between text-sm"><span>Ladder Base (A):</span> <span class="text-amber-400 font-mono" x-text="ladder_base.toFixed(2) + 'm'"></span></div>
-                <div class="flex justify-between font-bold text-lg text-blue-400 pt-2 border-t border-slate-700"><span>Req. Ladder (L):</span> <span x-text="ladder_len.toFixed(2) + 'm'"></span></div>
+            <div class="bg-blue-600 p-6 rounded-3xl shadow-lg shadow-blue-900/20">
+                <label class="text-[10px] text-blue-100 font-bold uppercase tracking-widest opacity-70">Req. Ladder Length</label>
+                <div class="text-4xl font-black text-white" x-text="ladder_len.toFixed(2) + 'm'"></div>
+                <div class="mt-4 pt-4 border-t border-white/10 flex justify-between text-blue-100 font-bold">
+                    <span>Base A: <span x-text="ladder_base.toFixed(2) + 'm'"></span></span>
+                    <span>H: <span x-text="h_total.toFixed(2) + 'm'"></span></span>
+                </div>
             </div>
         </div>
 
-        <div class="lg:col-span-2 bg-white rounded-2xl shadow-inner relative overflow-hidden flex items-center justify-center">
-            <svg viewBox="0 0 600 450" class="w-full h-full font-mono">
-                <line x1="50" y1="380" x2="550" y2="380" stroke="#1e293b" stroke-width="2" />
-                <line x1="500" y1="40" x2="500" y2="380" stroke="#1e293b" stroke-width="4" />
-                <g>
-                    <line :x1="500 - (ladder_base * 60)" y1="380" :x2="500" :y2="380 - (h_total * 60)" stroke="#cbd5e1" stroke-width="16" stroke-linecap="round" />
-                    <text :x="500 - (ladder_base * 60) + 35" y="370" fill="#f59e0b" font-size="11" font-weight="bold" x-text="ladder_angle_deg + '°'"></text>
-                </g>
-                <circle :cx="500" :cy="380 - (h_total * 60)" r="5" fill="#ef4444" stroke="white" stroke-width="1" />
+        <div class="lg:col-span-3 bg-white rounded-[2rem] shadow-inner overflow-hidden relative border-8 border-slate-900">
+            <svg :viewBox="`0 0 ${vWidth} ${vHeight}`" class="w-full h-full transition-all duration-500">
+                <defs>
+                    <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e293b" />
+                    </marker>
+                    <marker id="arr-amber" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" />
+                    </marker>
+                    <marker id="arr-emerald" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+                    </marker>
+                </defs>
+
+                <line x1="20" :y1="originY" :x2="originX + 40" :y2="originY" stroke="#0f172a" stroke-width="3" />
+                <line :x1="originX" y1="20" :x2="originX" :y2="originY" stroke="#0f172a" stroke-width="5" />
+
+                <line :x1="originX - (ladder_base * scale)" :y1="originY" 
+                      :x2="originX" :y2="originY - (h_total * scale)" 
+                      stroke="#e2e8f0" stroke-width="22" stroke-linecap="round" />
+                
+                <text :x="originX - (ladder_base * scale / 2)" 
+                      :y="originY - (h_total * scale / 2)"
+                      class="dimension-text" fill="#334155" font-size="18" text-anchor="middle"
+                      :transform="`rotate(${-Math.atan(h_total/ladder_base)*180/Math.PI}, ${originX - (ladder_base * scale / 2)}, ${originY - (h_total * scale / 2)}) translate(0, -15)`"
+                      x-text="'L = ' + ladder_len.toFixed(2) + 'm'"></text>
+
+                <line :x1="originX - (x * scale)" :y1="originY - (y * scale)" :x2="originX" :y2="originY - (y * scale)" 
+                      stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" />
+                <line :x1="originX - (x * scale)" :y1="originY - (y * scale)" :x2="originX" :y2="originY - (h_total * scale)" 
+                      stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" />
+
+                <path :d="`M ${originX - (x * scale) + 30} ${originY - (y * scale)} A 30 30 0 0 0 ${originX - (x * scale) + 30 * Math.cos(theta * Math.PI / 180)} ${originY - (y * scale) - 30 * Math.sin(theta * Math.PI / 180)}`" 
+                      fill="none" stroke="#ef4444" stroke-width="2" />
+                <text :x="originX - (x * scale) + 35" :y="originY - (y * scale) - 10" class="dimension-text" fill="#ef4444" font-size="14" x-text="theta.toFixed(1) + '°'"></text>
+
+                <rect :x="originX - (x * scale) - 20" :y="originY - (y * scale) - 15" width="40" height="30" rx="6" fill="#2563eb" />
+
+                <circle :cx="originX" :cy="originY - (y * scale)" r="4" fill="#ef4444" />
+                <circle :cx="originX" :cy="originY - (h_total * scale)" r="6" fill="#ef4444" stroke="white" stroke-width="2" />
+
+                <line :x1="originX - (x * scale)" :y1="originY + 40" :x2="originX" :y2="originY + 40" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
+                <text :x="originX - (x * scale / 2)" :y="originY + 65" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="16" x-text="'x = ' + x.toFixed(2) + 'm'"></text>
+
+                <line :x1="originX - (x * scale) + 30" :y1="originY - (y * scale)" :x2="originX - (x * scale) + 30" :y2="originY" stroke="#1e293b" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" />
+                <text :x="originX - (x * scale) + 20" :y="originY - (y * scale / 2)" text-anchor="middle" class="dimension-text" fill="#1e293b" font-size="16" :transform="`rotate(-90, ${originX - (x * scale) + 20}, ${originY - (y * scale / 2)})`" x-text="'y = ' + y.toFixed(2) + 'm'"></text>
+
+                <line :x1="originX + 30" :y1="originY - (h_total * scale)" :x2="originX + 30" :y2="originY" stroke="#10b981" stroke-width="2.5" marker-start="url(#arr-emerald)" marker-end="url(#arr-emerald)" />
+                <text :x="originX + 55" :y="originY - (h_total * scale / 2)" text-anchor="middle" class="dimension-text" fill="#10b981" font-size="18" :transform="`rotate(90, ${originX + 55}, ${originY - (h_total * scale / 2)})`" x-text="'H = ' + h_total.toFixed(2) + 'm'"></text>
+
+                <line :x1="originX - (ladder_base * scale)" :y1="originY + 15" :x2="originX" :y2="originY + 15" stroke="#f59e0b" stroke-width="2" marker-start="url(#arr-amber)" marker-end="url(#arr-amber)" />
+                <text :x="originX - (ladder_base * scale / 2)" :y="originY + 32" text-anchor="middle" class="dimension-text" fill="#f59e0b" font-size="16" x-text="'A = ' + ladder_base.toFixed(2) + 'm'"></text>
+                
+                <path :d="`M ${originX - (ladder_base * scale) + 35} ${originY} A 35 35 0 0 0 ${originX - (ladder_base * scale) + 32} ${originY - 12}`" fill="none" stroke="#f59e0b" stroke-width="2.5" />
+                <text :x="originX - (ladder_base * scale) + 40" :y="originY - 10" class="dimension-text" fill="#f59e0b" font-size="16" x-text="ladder_angle + '°'"></text>
             </svg>
         </div>
     </div>
